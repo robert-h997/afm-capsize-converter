@@ -1,0 +1,19 @@
+{
+  "name": "afm-capsize-converter",
+  "version": "0.1.0",
+  "description": "Converts Adobe Font Metrics (AFM) files into a flat JSON metrics schema for web tooling",
+  "type": "module",
+  "bin": {
+    "afm-capsize": "./dist/cli.js"
+  },
+  "main": "./dist/metrics.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js"
+  },
+  "license": "MIT",
+  "author": "robert-h997",
+  "engines": {
+    "node": ">=18"
+  }
+}
