@@ -54,9 +54,18 @@ afm-capsize Helvetica.afm --json
   "isFixedPitch": false,
   "underlinePosition": -100,
   "underlineThickness": 50,
-  "glyphCount": 315
+  "glyphCount": 315,
+  "glyphWidths": {
+    "space": 278,
+    "A": 667,
+    "eacute": 556
+  }
 }
 ```
+
+`glyphWidths` maps PostScript glyph name to advance width, which is what
+a fallback-font-matching tool needs to estimate rendered text width
+before a webfont has loaded.
 
 Write straight to a file with `-o`:
 
@@ -80,8 +89,8 @@ node dist/cli.js Helvetica.afm
 - `ascent`/`descent` fall back to the font's bounding box when the
   optional `Ascender`/`Descender` keys are missing, per the AFM spec.
 - AFM has no equivalent of hhea's line gap, so `lineGap` is always 0.
-- Per-glyph advance widths and kerning pairs are parsed only far enough
-  to count glyphs; they aren't part of the output schema yet.
+- Kerning pairs (`StartKernData`) aren't parsed; only advance widths from
+  `CharMetrics` are.
 
 ## License
 

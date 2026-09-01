@@ -1,8 +1,7 @@
 // Minimal parser for Adobe Font Metrics (AFM) files: a plain-text format
-// that ships with Type 1 fonts and some PDF/print tooling. We only care
-// about the global header keys and a count of the glyphs described in
-// StartCharMetrics/EndCharMetrics; per-glyph widths and kerning pairs are
-// out of scope for now.
+// that ships with Type 1 fonts and some PDF/print tooling. We read the
+// global header keys and, from StartCharMetrics/EndCharMetrics, each
+// glyph's code, name and advance width. Kerning pairs are out of scope.
 
 export interface AfmHeader {
   fontName?: string
@@ -20,14 +19,46 @@ export interface AfmHeader {
   descender?: number
 }
 
+export interface AfmGlyphMetric {
+  code: number
+  name: string
+  width: number
+}
+
 export interface ParsedAfm {
   header: AfmHeader
-  glyphCount: number
+  glyphs: AfmGlyphMetric[]
+}
+
+// A CharMetrics line looks like: "C 32 ; WX 278 ; N space ;" - a fixed
+// set of semicolon-separated "KEY value" fields, order not guaranteed.
+function parseCharMetricsLine(line: string): AfmGlyphMetric | null {
+  let code: number | undefined
+  let width: number | undefined
+  let name: string | undefined
+
+  for (const field of line.split(';')) {
+    const trimmed = field.trim()
+    if (trimmed.length === 0) continue
+    const spaceIndex = trimmed.indexOf(' ')
+    if (spaceIndex === -1) continue
+    const key = trimmed.slice(0, spaceIndex)
+    const value = trimmed.slice(spaceIndex + 1).trim()
+
+    if (key === 'C') code = Number(value)
+    else if (key === 'WX') width = Number(value)
+    else if (key === 'N') name = value
+  }
+
+  // WX and N are the only fields the flat schema needs; C is -1 for
+  // glyphs with no standard encoding slot, which AFM represents as "C -1".
+  if (name === undefined || width === undefined || Number.isNaN(width)) return null
+  return { code: code ?? -1, name, width }
 }
 
 export function parseAfm(source: string): ParsedAfm {
   const header: AfmHeader = {}
-  let glyphCount = 0
+  const glyphs: AfmGlyphMetric[] = []
   let inCharMetrics = false
 
   for (const rawLine of source.split(/\r\n|\r|\n/)) {
@@ -43,8 +74,10 @@ export function parseAfm(source: string): ParsedAfm {
       continue
     }
     if (inCharMetrics) {
-      // Each glyph is one semicolon-separated line starting with "C <code> ;".
-      if (line.startsWith('C ')) glyphCount++
+      if (line.startsWith('C ')) {
+        const glyph = parseCharMetricsLine(line)
+        if (glyph) glyphs.push(glyph)
+      }
       continue
     }
 
@@ -104,5 +137,5 @@ export function parseAfm(source: string): ParsedAfm {
     }
   }
 
-  return { header, glyphCount }
+  return { header, glyphs }
 }

@@ -23,11 +23,20 @@ export interface FontMetrics {
   underlinePosition: number
   underlineThickness: number
   glyphCount: number
+  // Advance width per glyph name, keyed the way AFM/PostScript name glyphs
+  // (e.g. "space", "A", "eacute") rather than by character code, since AFM
+  // encoding slots vary by font and codepoint isn't always available.
+  glyphWidths: Record<string, number>
 }
 
 export function afmToFontMetrics(parsed: ParsedAfm): FontMetrics {
-  const { header, glyphCount } = parsed
+  const { header, glyphs } = parsed
   const [, bboxBottom, , bboxTop] = header.fontBBox ?? [0, 0, 0, 0]
+
+  const glyphWidths: Record<string, number> = {}
+  for (const glyph of glyphs) {
+    glyphWidths[glyph.name] = glyph.width
+  }
 
   return {
     unitsPerEm: AFM_UNITS_PER_EM,
@@ -47,6 +56,7 @@ export function afmToFontMetrics(parsed: ParsedAfm): FontMetrics {
     isFixedPitch: header.isFixedPitch ?? false,
     underlinePosition: header.underlinePosition ?? 0,
     underlineThickness: header.underlineThickness ?? 0,
-    glyphCount,
+    glyphCount: glyphs.length,
+    glyphWidths,
   }
 }
