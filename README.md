@@ -73,6 +73,20 @@ Write straight to a file with `-o`:
 afm-capsize Helvetica.afm --json -o Helvetica.metrics.json
 ```
 
+Pass `--to-afm` to go the other way, turning a metrics JSON file back
+into an AFM file:
+
+```
+afm-capsize Helvetica.metrics.json --to-afm -o Helvetica.afm
+```
+
+This direction is lossy: the flat schema doesn't keep each glyph's
+original character code or the font's horizontal bounding box, so the
+regenerated AFM file uses `C -1` (no standard encoding slot) for every
+glyph and reconstructs `FontBBox` from `unitsPerEm`/`ascent`/`descent`
+rather than the font's real left/right extents. Kerning data was never
+captured either way, so it stays absent.
+
 ## Building
 
 No dependencies, just the TypeScript compiler:

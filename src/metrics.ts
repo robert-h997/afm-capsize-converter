@@ -60,3 +60,62 @@ export function afmToFontMetrics(parsed: ParsedAfm): FontMetrics {
     glyphWidths,
   }
 }
+
+const REQUIRED_FONT_METRICS_FIELDS = [
+  'unitsPerEm',
+  'ascent',
+  'descent',
+  'familyName',
+  'fullName',
+  'subfamilyName',
+  'glyphWidths',
+] as const
+
+// Guards the json-to-afm direction against malformed input files producing
+// an AFM file full of "undefined" instead of a clear error up front.
+export function assertFontMetrics(value: unknown): asserts value is FontMetrics {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('expected a JSON object')
+  }
+  const record = value as Record<string, unknown>
+  for (const key of REQUIRED_FONT_METRICS_FIELDS) {
+    if (!(key in record)) throw new Error(`missing required field "${key}"`)
+  }
+  if (typeof record.glyphWidths !== 'object' || record.glyphWidths === null) {
+    throw new Error('"glyphWidths" must be an object')
+  }
+}
+
+// Reverses afmToFontMetrics. Lossy: the flat schema drops per-glyph
+// character codes and the font's horizontal bounding box, so this fills
+// those back in with AFM-legal placeholders (C -1 means "no standard
+// encoding slot", which is always a valid thing for a CharMetrics line to
+// say) rather than trying to recover values that were never kept.
+export function fontMetricsToAfm(metrics: FontMetrics): string {
+  const glyphNames = Object.keys(metrics.glyphWidths).sort()
+
+  const lines: string[] = [
+    'StartFontMetrics 4.1',
+    `FontName ${metrics.fullName}`,
+    `FullName ${metrics.fullName}`,
+    `FamilyName ${metrics.familyName}`,
+    `Weight ${metrics.subfamilyName}`,
+    `ItalicAngle ${metrics.italicAngle}`,
+    `IsFixedPitch ${metrics.isFixedPitch ? 'true' : 'false'}`,
+    `FontBBox 0 ${metrics.descent} ${metrics.unitsPerEm} ${metrics.ascent}`,
+    `UnderlinePosition ${metrics.underlinePosition}`,
+    `UnderlineThickness ${metrics.underlineThickness}`,
+    `CapHeight ${metrics.capHeight}`,
+    `XHeight ${metrics.xHeight}`,
+    `Ascender ${metrics.ascent}`,
+    `Descender ${metrics.descent}`,
+    `StartCharMetrics ${glyphNames.length}`,
+  ]
+
+  for (const name of glyphNames) {
+    lines.push(`C -1 ; WX ${metrics.glyphWidths[name]} ; N ${name} ;`)
+  }
+
+  lines.push('EndCharMetrics', 'EndFontMetrics')
+  return lines.join('\n')
+}

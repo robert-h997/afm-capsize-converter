@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs'
 import { parseAfm } from './afm.js'
-import { afmToFontMetrics, type FontMetrics } from './metrics.js'
+import { afmToFontMetrics, assertFontMetrics, fontMetricsToAfm, type FontMetrics } from './metrics.js'
 
 interface CliOptions {
   inputPath: string
   json: boolean
+  toAfm: boolean
   outputPath?: string
 }
 
 function printUsage(): void {
   console.log(`usage: afm-capsize <input.afm> [--json] [-o <output>]
+       afm-capsize <input.json> --to-afm [-o <output>]
 
 Converts Adobe Font Metrics (AFM) files into the flat JSON metrics
 schema used by web line-height / fallback-font-matching tools
-(capsize and similar).
+(capsize and similar), and back again.
 
   --json          print the converted metrics as JSON instead of a table
+  --to-afm        read a metrics JSON file and write it out as an AFM file
   -o, --out FILE  write output to FILE instead of stdout
   -h, --help      show this message
 `)
@@ -25,6 +28,7 @@ schema used by web line-height / fallback-font-matching tools
 function parseArgs(argv: string[]): CliOptions | null {
   let inputPath: string | undefined
   let json = false
+  let toAfm = false
   let outputPath: string | undefined
 
   for (let i = 0; i < argv.length; i++) {
@@ -34,6 +38,10 @@ function parseArgs(argv: string[]): CliOptions | null {
     }
     if (arg === '--json') {
       json = true
+      continue
+    }
+    if (arg === '--to-afm') {
+      toAfm = true
       continue
     }
     if (arg === '-o' || arg === '--out') {
@@ -50,8 +58,11 @@ function parseArgs(argv: string[]): CliOptions | null {
   if (!inputPath) {
     throw new Error('missing input file')
   }
+  if (json && toAfm) {
+    throw new Error('--json and --to-afm are mutually exclusive')
+  }
 
-  return { inputPath, json, outputPath }
+  return { inputPath, json, toAfm, outputPath }
 }
 
 function formatTable(metrics: FontMetrics): string {
@@ -103,9 +114,29 @@ function main(): void {
     return
   }
 
-  const parsed = parseAfm(source)
-  const metrics = afmToFontMetrics(parsed)
-  const output = options.json ? JSON.stringify(metrics, null, 2) : formatTable(metrics)
+  let output: string
+  if (options.toAfm) {
+    let metrics: unknown
+    try {
+      metrics = JSON.parse(source)
+    } catch (err) {
+      console.error(`afm-capsize: could not parse ${options.inputPath} as JSON: ${(err as Error).message}`)
+      process.exitCode = 1
+      return
+    }
+    try {
+      assertFontMetrics(metrics)
+    } catch (err) {
+      console.error(`afm-capsize: ${options.inputPath} is not a valid metrics file: ${(err as Error).message}`)
+      process.exitCode = 1
+      return
+    }
+    output = fontMetricsToAfm(metrics)
+  } else {
+    const parsed = parseAfm(source)
+    const metrics = afmToFontMetrics(parsed)
+    output = options.json ? JSON.stringify(metrics, null, 2) : formatTable(metrics)
+  }
 
   if (options.outputPath) {
     writeFileSync(options.outputPath, output + '\n')
