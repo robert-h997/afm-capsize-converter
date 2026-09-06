@@ -96,6 +96,12 @@ npm run build
 node dist/cli.js Helvetica.afm
 ```
 
+Tests use Node's built-in test runner, no extra dependency needed:
+
+```
+npm test
+```
+
 ## Notes on the conversion
 
 - AFM files describe Type 1 fonts, which are always on a 1000-unit em

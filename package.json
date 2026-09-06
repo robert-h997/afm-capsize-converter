@@ -9,7 +9,9 @@
   "main": "./dist/metrics.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "pretest": "npm run build",
+    "test": "node --test dist"
   },
   "license": "MIT",
   "author": "robert-h997",
