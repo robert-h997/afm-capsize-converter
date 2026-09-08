@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, statSync, readdirSync, mkdirSync } from 'node:fs'
+import { basename, extname, join } from 'node:path'
 import { parseAfm } from './afm.js'
 import { afmToFontMetrics, assertFontMetrics, fontMetricsToAfm, type FontMetrics } from './metrics.js'
 
@@ -13,10 +14,16 @@ interface CliOptions {
 function printUsage(): void {
   console.log(`usage: afm-capsize <input.afm> [--json] [-o <output>]
        afm-capsize <input.json> --to-afm [-o <output>]
+       afm-capsize <input-dir> [--json] -o <output-dir>
+       afm-capsize <input-dir> --to-afm -o <output-dir>
 
 Converts Adobe Font Metrics (AFM) files into the flat JSON metrics
 schema used by web line-height / fallback-font-matching tools
 (capsize and similar), and back again.
+
+If <input> is a directory, every *.afm file in it (or every *.json
+file, with --to-afm) is converted the same way and written into the
+required output directory, one file per input.
 
   --json          print the converted metrics as JSON instead of a table
   --to-afm        read a metrics JSON file and write it out as an AFM file
@@ -87,6 +94,92 @@ function formatTable(metrics: FontMetrics): string {
   return rows.map(([label, value]) => `  ${label.padEnd(labelWidth)}  ${value}`).join('\n')
 }
 
+function convertAfmSource(source: string, json: boolean): string {
+  const parsed = parseAfm(source)
+  const metrics = afmToFontMetrics(parsed)
+  return json ? JSON.stringify(metrics, null, 2) : formatTable(metrics)
+}
+
+function convertJsonSource(source: string): string {
+  let metrics: unknown
+  try {
+    metrics = JSON.parse(source)
+  } catch (err) {
+    throw new Error(`could not parse as JSON: ${(err as Error).message}`)
+  }
+  try {
+    assertFontMetrics(metrics)
+  } catch (err) {
+    throw new Error(`not a valid metrics file: ${(err as Error).message}`)
+  }
+  return fontMetricsToAfm(metrics)
+}
+
+// Converts every matching file in a directory and writes each result into
+// outputPath under a name derived from the source file, mirroring what
+// running the single-file conversion in a loop over the shell would do.
+function convertDirectory(options: CliOptions): void {
+  if (!options.outputPath) {
+    console.error('afm-capsize: -o <dir> is required when converting a directory of files')
+    process.exitCode = 1
+    return
+  }
+
+  const sourceExt = options.toAfm ? '.json' : '.afm'
+  const targetExt = options.toAfm ? '.afm' : options.json ? '.json' : '.txt'
+
+  let entries: string[]
+  try {
+    entries = readdirSync(options.inputPath)
+      .filter((name) => extname(name).toLowerCase() === sourceExt)
+      .sort()
+  } catch (err) {
+    console.error(`afm-capsize: could not read ${options.inputPath}: ${(err as Error).message}`)
+    process.exitCode = 1
+    return
+  }
+
+  if (entries.length === 0) {
+    console.error(`afm-capsize: no ${sourceExt} files found in ${options.inputPath}`)
+    process.exitCode = 1
+    return
+  }
+
+  try {
+    mkdirSync(options.outputPath, { recursive: true })
+  } catch (err) {
+    console.error(`afm-capsize: could not create ${options.outputPath}: ${(err as Error).message}`)
+    process.exitCode = 1
+    return
+  }
+
+  for (const entry of entries) {
+    const inputFile = join(options.inputPath, entry)
+    const stem = basename(entry, extname(entry))
+    const outputFile = join(options.outputPath, stem + targetExt)
+
+    let source: string
+    try {
+      source = readFileSync(inputFile, 'utf8')
+    } catch (err) {
+      console.error(`afm-capsize: could not read ${inputFile}: ${(err as Error).message}`)
+      process.exitCode = 1
+      continue
+    }
+
+    let output: string
+    try {
+      output = options.toAfm ? convertJsonSource(source) : convertAfmSource(source, options.json)
+    } catch (err) {
+      console.error(`afm-capsize: ${inputFile}: ${(err as Error).message}`)
+      process.exitCode = 1
+      continue
+    }
+
+    writeFileSync(outputFile, output + '\n')
+  }
+}
+
 function main(): void {
   const argv = process.argv.slice(2)
   let options: CliOptions | null
@@ -105,6 +198,20 @@ function main(): void {
     return
   }
 
+  let inputStat: ReturnType<typeof statSync>
+  try {
+    inputStat = statSync(options.inputPath)
+  } catch (err) {
+    console.error(`afm-capsize: could not read ${options.inputPath}: ${(err as Error).message}`)
+    process.exitCode = 1
+    return
+  }
+
+  if (inputStat.isDirectory()) {
+    convertDirectory(options)
+    return
+  }
+
   let source: string
   try {
     source = readFileSync(options.inputPath, 'utf8')
@@ -115,27 +222,12 @@ function main(): void {
   }
 
   let output: string
-  if (options.toAfm) {
-    let metrics: unknown
-    try {
-      metrics = JSON.parse(source)
-    } catch (err) {
-      console.error(`afm-capsize: could not parse ${options.inputPath} as JSON: ${(err as Error).message}`)
-      process.exitCode = 1
-      return
-    }
-    try {
-      assertFontMetrics(metrics)
-    } catch (err) {
-      console.error(`afm-capsize: ${options.inputPath} is not a valid metrics file: ${(err as Error).message}`)
-      process.exitCode = 1
-      return
-    }
-    output = fontMetricsToAfm(metrics)
-  } else {
-    const parsed = parseAfm(source)
-    const metrics = afmToFontMetrics(parsed)
-    output = options.json ? JSON.stringify(metrics, null, 2) : formatTable(metrics)
+  try {
+    output = options.toAfm ? convertJsonSource(source) : convertAfmSource(source, options.json)
+  } catch (err) {
+    console.error(`afm-capsize: ${options.inputPath}: ${(err as Error).message}`)
+    process.exitCode = 1
+    return
   }
 
   if (options.outputPath) {

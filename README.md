@@ -87,6 +87,24 @@ glyph and reconstructs `FontBBox` from `unitsPerEm`/`ascent`/`descent`
 rather than the font's real left/right extents. Kerning data was never
 captured either way, so it stays absent.
 
+### Converting a directory
+
+Pass a directory as the input instead of a single file to convert
+everything in it at once. `-o` is required in this case and names the
+output directory, which is created if it doesn't already exist:
+
+```
+afm-capsize fonts/ --json -o fonts/metrics
+```
+
+Every `*.afm` file in `fonts/` gets its own output file in
+`fonts/metrics`, named after the source file (`Helvetica.afm` becomes
+`Helvetica.json`, or `Helvetica.txt` for table output without
+`--json`). `--to-afm` works the same way in reverse, reading every
+`*.json` file in the input directory and writing a matching `.afm`
+file. A file that fails to convert is reported and skipped so one bad
+file in a batch doesn't stop the rest.
+
 ## Building
 
 No dependencies, just the TypeScript compiler:
