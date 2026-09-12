@@ -7,14 +7,15 @@ import { afmToFontMetrics, assertFontMetrics, fontMetricsToAfm, type FontMetrics
 interface CliOptions {
   inputPath: string
   json: boolean
+  compact: boolean
   toAfm: boolean
   outputPath?: string
 }
 
 function printUsage(): void {
-  console.log(`usage: afm-capsize <input.afm> [--json] [-o <output>]
+  console.log(`usage: afm-capsize <input.afm> [--json] [--compact] [-o <output>]
        afm-capsize <input.json> --to-afm [-o <output>]
-       afm-capsize <input-dir> [--json] -o <output-dir>
+       afm-capsize <input-dir> [--json] [--compact] -o <output-dir>
        afm-capsize <input-dir> --to-afm -o <output-dir>
 
 Converts Adobe Font Metrics (AFM) files into the flat JSON metrics
@@ -26,6 +27,7 @@ file, with --to-afm) is converted the same way and written into the
 required output directory, one file per input.
 
   --json          print the converted metrics as JSON instead of a table
+  --compact       with --json, print it as a single line
   --to-afm        read a metrics JSON file and write it out as an AFM file
   -o, --out FILE  write output to FILE instead of stdout
   -h, --help      show this message
@@ -35,6 +37,7 @@ required output directory, one file per input.
 function parseArgs(argv: string[]): CliOptions | null {
   let inputPath: string | undefined
   let json = false
+  let compact = false
   let toAfm = false
   let outputPath: string | undefined
 
@@ -45,6 +48,10 @@ function parseArgs(argv: string[]): CliOptions | null {
     }
     if (arg === '--json') {
       json = true
+      continue
+    }
+    if (arg === '--compact') {
+      compact = true
       continue
     }
     if (arg === '--to-afm') {
@@ -68,8 +75,14 @@ function parseArgs(argv: string[]): CliOptions | null {
   if (json && toAfm) {
     throw new Error('--json and --to-afm are mutually exclusive')
   }
+  if (compact && !json) {
+    throw new Error('--compact requires --json')
+  }
+  if (compact && toAfm) {
+    throw new Error('--compact and --to-afm are mutually exclusive')
+  }
 
-  return { inputPath, json, toAfm, outputPath }
+  return { inputPath, json, compact, toAfm, outputPath }
 }
 
 function formatTable(metrics: FontMetrics): string {
@@ -94,10 +107,11 @@ function formatTable(metrics: FontMetrics): string {
   return rows.map(([label, value]) => `  ${label.padEnd(labelWidth)}  ${value}`).join('\n')
 }
 
-function convertAfmSource(source: string, json: boolean): string {
+function convertAfmSource(source: string, json: boolean, compact: boolean): string {
   const parsed = parseAfm(source)
   const metrics = afmToFontMetrics(parsed)
-  return json ? JSON.stringify(metrics, null, 2) : formatTable(metrics)
+  if (!json) return formatTable(metrics)
+  return compact ? JSON.stringify(metrics) : JSON.stringify(metrics, null, 2)
 }
 
 function convertJsonSource(source: string): string {
@@ -169,7 +183,9 @@ function convertDirectory(options: CliOptions): void {
 
     let output: string
     try {
-      output = options.toAfm ? convertJsonSource(source) : convertAfmSource(source, options.json)
+      output = options.toAfm
+        ? convertJsonSource(source)
+        : convertAfmSource(source, options.json, options.compact)
     } catch (err) {
       console.error(`afm-capsize: ${inputFile}: ${(err as Error).message}`)
       process.exitCode = 1
@@ -223,7 +239,9 @@ function main(): void {
 
   let output: string
   try {
-    output = options.toAfm ? convertJsonSource(source) : convertAfmSource(source, options.json)
+    output = options.toAfm
+      ? convertJsonSource(source)
+      : convertAfmSource(source, options.json, options.compact)
   } catch (err) {
     console.error(`afm-capsize: ${options.inputPath}: ${(err as Error).message}`)
     process.exitCode = 1

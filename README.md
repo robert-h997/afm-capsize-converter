@@ -67,6 +67,17 @@ afm-capsize Helvetica.afm --json
 a fallback-font-matching tool needs to estimate rendered text width
 before a webfont has loaded.
 
+Add `--compact` to print that JSON as a single line instead, which is
+easier to pipe into something like `jq` or store one-per-line in a log:
+
+```
+afm-capsize Helvetica.afm --json --compact
+```
+
+```json
+{"unitsPerEm":1000,"ascent":718,"descent":-207,"lineGap":0,"capHeight":718,"xHeight":523,"familyName":"Helvetica","fullName":"Helvetica","subfamilyName":"Medium","italicAngle":0,"isFixedPitch":false,"underlinePosition":-100,"underlineThickness":50,"glyphCount":315,"glyphWidths":{"space":278,"A":667,"eacute":556}}
+```
+
 Write straight to a file with `-o`:
 
 ```
