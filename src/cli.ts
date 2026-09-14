@@ -34,7 +34,7 @@ required output directory, one file per input.
 `)
 }
 
-function parseArgs(argv: string[]): CliOptions | null {
+export function parseArgs(argv: string[]): CliOptions | null {
   let inputPath: string | undefined
   let json = false
   let compact = false
@@ -255,4 +255,8 @@ function main(): void {
   }
 }
 
-main()
+// Only run when invoked directly (node dist/cli.js ...), not when the test
+// suite imports this module to exercise parseArgs.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
+}
